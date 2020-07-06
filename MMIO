@@ -1,0 +1,217 @@
+# Homework Assignment 8
+# Pei-Yun Tseng
+# April 21, 2020
+#
+# Instructions: 
+# set pixel dim to 4x4
+# set display dim to 256x256
+# set base address to x100800 ($gp)
+# Connect to MIPS and run
+# Connect keyboard and run
+# use w (up), s (down), a (left), d (right), space (exit)
+# all other keys are ignored
+# set up some constants
+# width of screen in pixels
+# 256 / 4 = 64
+.eqv WIDTH 64
+# height of screen in pixels
+.eqv HEIGHT 64
+# colors
+.eqv	RED 	0x00FF0000
+.eqv	GREEN 	0x0000FF00
+.eqv	BLUE	0x000000FF
+.eqv	WHITE	0X00FFFFFF
+.eqv	YELLOW	0X00FFFF00
+.eqv	CYAN	0X0000FFFF
+.eqv	MAGENTA	0X00FF00FF
+
+.data
+colors:	.word	MAGENTA, CYAN, YELLOW, RED, GREEN, WHITE
+
+.text
+main:
+	#counters
+	la 	$a3, colors #keep the base address of colors
+	addi	$t2, $t2, 0 #keeps counter of the pixels
+	addi	$t1, $t1, 0 #keeps counter of color index
+	
+	#calculates the width and height
+	addi 	$t3, $0, WIDTH    # a0 = X = WIDTH/2
+	sra 	$t3, $t3, 1
+	addi 	$a1, $0, HEIGHT   # a1 = Y = HEIGHT/2
+	sra 	$a1, $a1, 1
+	
+inputcheck:
+	#check for keyboard input
+	lw $t0, 0xffff0000  #t1 holds if input available
+    	beq $t0, 0, toploop   #If no input, keep drawing the box
+    	
+    	# process input
+	lw 	$s2, 0xffff0004
+	beq	$s2, 32, exit	# input space
+	beq	$s2, 119, up 	# input w
+	beq	$s2, 115, down 	# input s
+	beq	$s2, 97, left  	# input a
+	beq	$s2, 100, right	# input d
+	# invalid input, ignore
+	j	toploop
+    	
+    	#process a valid input
+up:
+	li	$a2, 0		#use black as the color
+	li	$s3, 119	#signify to use black
+	j	toploop		#black out the box
+upredraw:	
+	move	$s3, $0		#signify normal colors
+	addi	$a1, $a1, -1	#adjust the y value
+	j	toploop		#redraw the box
+
+down:
+	li	$a2, 0		#use black as the color
+	li	$s3, 115	#flag to use black
+	j	toploop		#black out the box
+	
+downredraw:
+	move 	$s3, $0		#signify normal colors
+	addi	$a1, $a1, 1	#adjust the y value
+	j	toploop		#redraw the box
+left:
+	li	$a2, 0		#use black as the color
+	li	$s3, 97		#signify normal colors
+	j	toploop		#black out the box
+leftredraw:
+	move	$s3, $0		#signify normal colors
+	addi	$t3, $t3, -1	#adjust the x value
+	j	toploop		#redraw the box
+	
+right:
+	li	$a2, 0		#use black as the color
+    	li	$s3, 100	#flag to use black
+    	j	toploop		#black out the box
+rightredraw:
+	move	$s3, $0		#signify normal colors
+	addi	$t3, $t3, 1	#adjust the x value
+	j	toploop		#redraw the box
+
+toploop:	
+	#draw pixels to the right 6 times
+	bne	$s3, 0, blacktop	#uses black if $s3 is not 0
+	jal	color_loop		#uses the color loop to choose color
+blacktop:	
+	jal	draw_pixel		
+	addi	$t2, $t2, 1		#pixel counter
+	beq	$t2, 6, rightloop	#branch if 6 pixels are drawn
+	addi	$t3, $t3, 1		#moves x to the right
+	jal 	toploop
+
+	
+rightloop:
+	#draw pixels down 6 times
+	addi	$a1, $a1, 1 
+	bne	$s3, 0, blackright
+	jal	color_loop
+blackright:
+	jal	delay
+	jal	draw_pixel
+	addi	$t2, $t2, 1		#counter for number of pixels
+	beq	$t2, 12, bottomloop	#branch if drawn 6 times
+	jal	rightloop
+	
+bottomloop:
+	#draw pixels left 6 times
+	subi	$t3, $t3, 1
+	bne	$s3, 0, blackbottom
+	jal	color_loop
+blackbottom:	
+	jal	delay
+	jal	draw_pixel
+	addi	$t2, $t2, 1
+	beq	$t2, 18, leftloop
+	jal	bottomloop
+	
+leftloop:
+	#draw pixels up 6 times
+	subi	$a1, $a1, 1
+	bne	$s3, 0, blackleft	
+	jal	color_loop
+blackleft:
+	jal	delay
+	jal	draw_pixel
+	addi	$t2, $t2, 1
+	beq	$t2, 24, movestep
+	jal	leftloop
+	jal	delay
+	
+movestep:	
+	addi 	$t3, $t3, 1	#move x value 1 to the right to start at the beginning
+	bne	$s3, 0, skipincr
+	jal	increment	#increments the color index for redrawing a box
+skipincr:
+	jal	reset_pixel
+	jal	delay
+	#branch checks to see if it's black box, then needs to return to redraw box in color
+	beq	$s3, 119, upredraw
+	beq	$s3, 115, downredraw
+	beq	$s3, 97, leftredraw
+	beq	$s3, 100, rightredraw
+	j	inputcheck
+	
+	
+exit:	li	$v0, 10
+	syscall
+
+#################################################
+# subroutine to draw a pixel
+# $t3 = X
+# $a1 = Y
+# $a2 = color
+draw_pixel:
+	# s1 = address = $gp + 4*(x + y*width)
+	mul	$s1, $a1, WIDTH   # y * WIDTH
+	add	$s1, $s1, $t3	  # add X
+	mul	$s1, $s1, 4	  # multiply by 4 to get word offset
+	add	$s1, $s1, $gp	  # add to base address
+	sw	$a2, 0($s1)	  # store color at memory location
+	j	return
+	
+color_loop:
+	beq 	$t1, 6, reset_color	#when the color reaches 6, then the color will restart
+	lw	$a2, ($a3) 	#load the address of color to $a2
+	addi 	$a3, $a3, 4	#add 4 to the address to the position of next color
+	addi	$t1, $t1, 1	#add 1 to the index of the color
+	j	return
+	
+reset_color:	
+	la	$a3, colors	#reset the color address to magenta
+	lw	$a2,($a3)	#load it to a2
+	move	$t1, $0		#restart the counter
+	addi	$a3, $a3, 4	#prepare for next color
+	addi	$t1, $t1, 1	#increment counter
+	j	return
+	
+delay:
+	li	$a0, 5		#5ms delay for drawing pixels
+	li	$v0, 32
+	syscall
+	j	return
+	
+increment:
+	la	$a3, colors
+	addi	$t4, $t4, 1	#keeps track of color index for redrawing a box
+	beq	$t4, 6, reset_counter
+	move	$t1, $t4	#keeps track of color index for drawing each pixel
+	mul	$t5, $t4, 4	#multiply by the index to calculate offset
+	add	$a3, $a3, $t5	#add offset to base address
+	j	return
+
+reset_counter:
+	la	$a3, colors	#resets the color index to base address
+	move 	$t4, $0		#resets the color index counter for redrawing a box
+	j	return
+	
+reset_pixel:
+	move	$t2, $0		#resets the pixel counter to 0 for redrawing box
+	j	return
+
+return:
+	jr	$ra
