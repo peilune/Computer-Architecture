@@ -1,0 +1,213 @@
+###############################################################################
+#Pei-Yun Tseng
+#Homework 5
+#CS3340 3/19/2020
+#This program will compress and uncompress files using run length encoding
+###############################################################################
+
+
+.include	"compressionMacros"
+
+.data
+pointer:	.word 0
+input:		.space 1024
+uncomp_buff:	.space 1024
+file:		.space 20
+enter:		.asciiz "\n"
+		.align 2
+askFile:	.asciiz "\nPlease enter the filename to compress or hit <enter> to exit: "
+errorMsg:	.asciiz "\nError opening file. Program terminating."
+original:	.asciiz "\nOriginal data:\n"
+originalSize:	.asciiz "\nOriginal file size: "
+compressedSize:	.asciiz "\nCompressed file size: "
+compressed:	.asciiz "\nCompressed data:\n"
+uncompr_str:	.asciiz "\nUncompressed data:\n"
+compSize:	.word 0
+origSize:	.word 0
+
+
+.text
+main: 
+	allocate(1024)	#call the allocate heap macro
+	sw $v0, pointer	#store the address at pointer
+	move $s1, $v0 #store pointer in register
+
+ask:	
+	#clear input buffer
+	la $t1, input
+	clear($t1)
+	
+	#clear uncomp buffer
+	la $t1, uncomp_buff
+	clear($t1)
+	
+	#clear file
+	la $t1, file
+	clear($t1)
+	
+	#clear dynamic memory
+	lw $t1, pointer
+	clear($t1)
+	
+	#ask user for filename
+	print_str(askFile)
+	
+	#read the string
+	get_string(file)
+	
+	#if user enters nothing branch exit
+	lw $t1, enter
+	lw $t2, file
+	beq $t2, $t1, exit
+	
+	#remove \n from string
+	remove(file, enter)
+	
+	#else open file
+	open_file(file)
+	
+	#save file descriptor
+	move $s0, $v0
+	
+	#check if file is not found branch to error
+	blt $v0, $zero, error
+	
+	#if file is found, read file
+	read_file($s0, input)
+	move $s2, $v0 #stores number of characters
+	sw $s2, origSize
+	
+	#close the file
+	close($s0)
+	
+	#output original data
+	print_str(original)
+	
+	#print data
+	print_str(input)
+	
+	#call the compression function
+	la $a0, input	#address of input buffer
+	move $a1, $s1  #address of compression buffer
+	move $a2, $s2	#size of original file
+	jal compression
+	sw $v0, compSize
+	lw $s1, pointer
+	
+	#print compressed string
+	print_str(compressed)
+	
+	#print compressed data
+	li $s2, 9
+	move $a2, $s1
+	jal print_comp
+	
+	#print uncompressed string
+	print_str(uncompr_str)
+	
+	#print uncompressed data
+	move $a2, $s1
+	jal print_uncompress
+	
+	#save uncompressed data to static memory
+	move $a2, $s1
+	la $a0, uncomp_buff
+	jal save_uncompress
+	
+	#print original file size
+	lw $t1, origSize
+	print_str(originalSize)
+	print_int($t1)
+	
+	lw $t1, compSize
+	#print compressed
+	print_str(compressedSize)
+	print_int($t1)
+	
+	j ask
+	
+exit: 	li $v0, 10
+	syscall
+	
+	
+	#print error message if file not found, then exit
+error:	
+	print_str(errorMsg)
+	j exit
+	
+
+compression:
+	#store the size in $v0
+	move $v0, $zero
+	#count duplicates in $t3
+	addi $t3, $t3, 1
+	lb $t1, ($a0) #load character in $t1
+	
+loop:	
+	addi $a0, $a0, 1 #move to next character
+	lb $t2 ($a0) #load character in $t2
+	beq $t1, $t2, add #if characters match branch
+	#do this when characters don't match
+	sb $t1, ($s1) #store the letter in dynamic buffer
+	addi $v0, $v0, 1 #increase count of size
+	addi $s1, $s1, 1 #move to next space
+	sb $t3, ($s1)	#store the count
+	addi $v0, $v0, 1 #add 1 to the size
+	addi $s1, $s1, 1 #move to next space
+	move $t3, $zero	#reset $t3
+	beq $t2, $zero, return
+	addi $t3, $t3, 1 #add 1 to the count for next char
+	move $t1, $t2	#move contents 
+	j loop
+	
+add:
+	addi $t3, $t3, 1
+	j loop
+	
+print_comp:	
+	lb $t1, ($a2) #load character from $a2
+	beq $t1, $zero, return
+	bgt $t1, $s2, char
+	#print compressed string
+	print_int($t1)
+	addi $a2, $a2, 1
+	j print_comp
+char:
+	print_char($t1)
+	addi $a2, $a2, 1
+	j print_comp
+	
+print_uncompress:
+	lb $t1, ($a2)	#load char 
+	beq $t1, $zero, return
+	addi $a2, $a2, 1 #move to next char
+	lb $t2, ($a2) #load int
+	
+uncomploop:
+	beq $t2, $zero, next
+	print_char($t1)
+	subi $t2, $t2, 1
+	j uncomploop
+next:	
+	addi $a2, $a2, 1
+	j print_uncompress
+	
+save_uncompress:
+	lb $t1, ($a2)	#load char 
+	beq $t1, $zero, return
+	addi $a2, $a2, 1 #move to next char
+	lb $t2, ($a2) #load int
+	
+save_loop:	
+	beq $t2, $zero, addOne
+	sb $t1, ($a0) #store char in uncomp
+	addi $a0, $a0, 1 #move to next space
+	subi $t2, $t2, 1 #decrease count
+	j save_loop
+
+addOne:
+	addi $a2, $a2, 1
+	j save_uncompress
+
+return:
+	jr $ra

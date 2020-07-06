@@ -1,0 +1,95 @@
+# file for macros
+
+#### print an int
+.macro print_int(%x)
+	li $v0, 1
+	add $a0, $zero, %x
+	syscall
+.end_macro
+
+#print a char
+.macro print_char(%char)
+	add $a0, $zero, %char
+	li $v0, 11
+	syscall
+.end_macro
+
+#print a string
+.macro print_str (%str)
+	li $v0, 4
+	la $a0, %str
+	syscall
+.end_macro
+
+#print data
+.macro print_data (%str)
+	li $v0, 4
+	la $a0, (%str)
+	syscall
+.end_macro
+
+#get a string from the user
+.macro get_string(%str)
+	la $a0, %str
+	li $a1, 20
+	li $v0, 8
+	syscall
+.end_macro
+
+#open file 
+.macro open_file(%name)
+	la $a0, %name	#input file name
+	li $a1, 0
+	li $a2, 0
+	li $v0, 13
+	syscall
+.end_macro
+
+#remove \n from string
+.macro remove(%string, %enter)
+	lw $t1, %enter	
+	la $a0, %string
+loop:	
+	lb $t2, ($a0)
+	beq $t2, $t1, sub
+	addi $a0, $a0, 1 #move to next byte
+	j loop
+	
+sub:	sb $zero, ($a0)
+.end_macro
+
+#close file
+.macro	close(%fd)
+	move $a0, %fd
+	li $v0, 16
+	syscall
+.end_macro
+
+#read file
+.macro read_file(%file, %pointer)
+	move $a0, %file #file descriptor
+	la $a1, %pointer
+	li $a2, 1024
+	li $v0, 14
+	syscall
+.end_macro
+
+#allocate heap memory	###allocate 1024 bytes
+.macro allocate(%bytes)
+	li $a0, %bytes #allocate 1024 bytes
+	li $v0, 9
+	syscall
+.end_macro
+
+#clear memory
+.macro clear(%buffer)
+clearLoop:
+	lb $a0, ($t1)
+	bne $a0, $zero, sub
+	j end
+sub:	
+	sb $zero, ($t1)
+	addi $t1, $t1, 1
+	j clearLoop
+end:
+	.end_macro
