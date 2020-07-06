@@ -85,7 +85,9 @@ charloop:
 	lb   $t0, 0($a1)
     	beq  $t0, $t3, storeChar
     	addi $a1,$a1,1		#add 1 to the address to move to next byte
-    	addi $t4,$t4,1		#add 1 to $t4 to keep count of chars
+    	addi $s1,$s1,1		#add 1 to $s1 to keep count of chars
+    	addi $sp, $sp, -4	#moves stack pointer
+    	sw   $s1, ($sp) 	#stores char count in $s1 to stack pointer
     	j     charloop
 	
 	
@@ -102,7 +104,9 @@ incrementWord:
 	j	nextChar
     	
 storeChar: 
-  	move	$v0, $t4	#stores the charcount from $t4 to $v0
+	lw	$s1, ($sp)	#store value from stack pointer in $s1
+	addi	$sp, $sp, 4	#move the stack pointer down
+	move	$v0, $s1	#store contents of $s1(char count) to $vo
  	sw	$v0, charCount
  	move	$t4, $0		#clear the register $t4 for the next loop
 	jr	$ra
